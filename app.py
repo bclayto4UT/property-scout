@@ -7,6 +7,13 @@ import sqlite3
 import os
 import pandas as pd
 import streamlit as st
+from urllib.parse import quote_plus
+try:
+    import folium
+    from streamlit_folium import st_folium
+    _FOLIUM_OK = True
+except ImportError:
+    _FOLIUM_OK = False
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DB_PATH = os.environ.get("DB_PATH", "data/properties.db")
@@ -129,6 +136,27 @@ with st.sidebar:
     show_rent     = st.checkbox("Rent projection", value=True)
     show_location = st.checkbox("Location fields",  value=False)
 
+    st.divider()
+
+    # ── Data refresh ──────────────────────────────────────────────────────────
+    # Shows when data was last loaded and lets anyone bust the cache instantly.
+    # Does NOT re-run the scraper — that still runs locally. This just forces
+    # the app to re-read the database so the latest scraper output is visible.
+    import datetime as _dt
+    if "last_refresh" not in st.session_state:
+        st.session_state.last_refresh = _dt.datetime.now().strftime("%-I:%M %p")
+
+    st.markdown(
+        f"<div style='font-size:0.72rem; color:#64748b; margin-bottom:0.5rem'>"
+        f"Data loaded at {st.session_state.last_refresh}</div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.session_state.last_refresh = _dt.datetime.now().strftime("%-I:%M %p")
+        st.rerun()
+
 # ── Apply filters ─────────────────────────────────────────────────────────────
 df = sales.copy()
 
@@ -179,7 +207,7 @@ for i, (tier, meta) in enumerate(TIER_META.items()):
 st.divider()
 
 # ── Tabs: Map / Table / Rent Profiles ─────────────────────────────────────────
-tab_map, tab_table, tab_rent = st.tabs(["🗺️ Map", "📊 Table", "📈 Rent Profiles"])
+tab_map, tab_table, tab_rent, tab_calc = st.tabs(["🗺️ Map", "📊 Table", "📈 Rent Profiles", "🧮 Threshold Calculator"])
 
 # ── MAP TAB ───────────────────────────────────────────────────────────────────
 # Google My Maps embed URL — edit the `mid=` value if you ever create a new map
@@ -210,6 +238,82 @@ with tab_map:
         "**[Open full map ↗](https://www.google.com/maps/d/u/0/viewer?mid=14ZUn3qDQoLP_SCuNq8ErT3aADL4Juwc)**"
     )
 
+    # ── Folium property pin map ───────────────────────────────────────────────
+    st.markdown("#### 📍 Filtered Properties")
+    st.markdown(
+        "<p style='color:#94a3b8; font-size:0.85rem; margin-top:-0.5rem'>"
+        "Pins are colour-coded by investment tier. Click any pin for details.</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not _FOLIUM_OK:
+        st.warning(
+            "Install `folium` and `streamlit-folium` to enable the property pin map: "
+            "`pip install folium streamlit-folium`"
+        )
+    else:
+        map_df = df[df["latitude"].notna() & df["longitude"].notna()].copy()
+
+        if map_df.empty:
+            st.info("No properties with coordinates match your current filters.")
+        else:
+            # Tier → folium circle colour
+            TIER_COLORS = {
+                "immediately_rentable": "#22c55e",
+                "rentable_1_2_years":   "#eab308",
+                "high_risk":            "#ef4444",
+                "no_rent_data":         "#94a3b8",
+            }
+
+            center_lat = map_df["latitude"].mean()
+            center_lon = map_df["longitude"].mean()
+
+            fmap = folium.Map(
+                location=[center_lat, center_lon],
+                zoom_start=11,
+                tiles="CartoDB dark_matter",
+            )
+
+            for _, row in map_df.iterrows():
+                tier   = row.get("tier", "no_rent_data")
+                color  = TIER_COLORS.get(tier, "#94a3b8")
+                meta   = TIER_META.get(tier, TIER_META["no_rent_data"])
+                cf     = row.get("cash_flow_now") or 0
+                cf_str = f"+${cf:,.0f}/mo" if cf >= 0 else f"-${abs(cf):,.0f}/mo"
+                price  = row.get("price") or 0
+                piti   = row.get("monthly_piti") or 0
+                rent   = row.get("rent_estimate") or 0
+                beds   = int(row.get("beds") or 0)
+                addr   = row.get("address", "")
+                city   = row.get("city", "")
+
+                popup_html = f"""
+                <div style="font-family:sans-serif; font-size:13px; min-width:200px">
+                    <b>{addr}</b><br>
+                    {city}, {row.get('zip','')}<br>
+                    <hr style="margin:4px 0">
+                    <b style="color:{color}">{meta['icon']} {meta['label']}</b><br>
+                    Price: <b>${price:,.0f}</b> &nbsp;·&nbsp; {beds}bd<br>
+                    PITI: <b>${piti:,.0f}/mo</b><br>
+                    Rent est: <b>${rent:,.0f}/mo</b><br>
+                    Cash flow: <b style="color:{'green' if cf >= 0 else 'red'}">{cf_str}</b>
+                </div>
+                """
+
+                folium.CircleMarker(
+                    location=[row["latitude"], row["longitude"]],
+                    radius=7,
+                    color=color,
+                    fill=True,
+                    fill_color=color,
+                    fill_opacity=0.85,
+                    weight=1.5,
+                    popup=folium.Popup(popup_html, max_width=260),
+                    tooltip=f"{addr} — {cf_str}",
+                ).add_to(fmap)
+
+            st_folium(fmap, use_container_width=True, height=480, returned_objects=[])
+
     # Property cards below map so users can cross-reference
     st.markdown("#### 📋 Properties matching your filters")
     st.markdown(
@@ -234,34 +338,55 @@ with tab_map:
             cf_color = "#22c55e" if cf >= 0 else "#ef4444"
             bey  = row.get("break_even_year")
             bey_str  = f"Break-even yr {int(bey)}" if pd.notna(bey) and bey else ""
-            redfin_link = (
-                f'<a href="{row["listing_url"]}" target="_blank" '
-                f'style="font-size:0.8rem; color:#38bdf8; text-decoration:none">View on Redfin →</a>'
-                if row.get("listing_url") else ""
+
+            # ── Redfin link: stored URL first, fallback to search ─────────────
+            addr    = row.get("address", "") or ""
+            city    = row.get("city", "") or ""
+            state   = row.get("state", "NC") or "NC"
+            if row.get("listing_url"):
+                redfin_url = row["listing_url"]
+            else:
+                redfin_search = quote_plus(f"{addr}, {city}, {state}")
+                redfin_url = f"https://www.redfin.com/search#combined?location={redfin_search}"
+
+            # ── Zillow link: address-based search URL ─────────────────────────
+            zillow_slug = quote_plus(f"{addr} {city} {state}").replace("+", "-")
+            zillow_url  = f"https://www.zillow.com/homes/{zillow_slug}_rb/"
+
+            listing_buttons = (
+                f'<a href="{redfin_url}" target="_blank" style="'
+                f'font-size:0.78rem; color:#38bdf8; text-decoration:none; '
+                f'background:#38bdf811; border:1px solid #38bdf844; '
+                f'padding:3px 10px; border-radius:6px; white-space:nowrap">🔴 Redfin →</a>'
+                f'&nbsp;'
+                f'<a href="{zillow_url}" target="_blank" style="'
+                f'font-size:0.78rem; color:#60a5fa; text-decoration:none; '
+                f'background:#60a5fa11; border:1px solid #60a5fa44; '
+                f'padding:3px 10px; border-radius:6px; white-space:nowrap">🏠 Zillow →</a>'
             )
 
             st.markdown(f"""
             <div style="background:#1e293b; border-radius:10px; padding:0.9rem 1.1rem;
                         margin-bottom:0.5rem; border-left: 4px solid {meta['color']}">
                 <div style="display:flex; justify-content:space-between; align-items:baseline">
-                    <b style="color:#f1f5f9; font-size:1rem">{row.get('address','Unknown')}</b>
+                    <b style="color:#f1f5f9; font-size:1rem">{addr or 'Unknown'}</b>
                     <span style="color:{cf_color}; font-weight:700; font-size:1rem">{cf_str}</span>
                 </div>
                 <div style="color:#94a3b8; font-size:0.83rem; margin-top:3px">
-                    {row.get('city','')}, {row.get('zip','')} &nbsp;·&nbsp;
+                    {city}, {row.get('zip','')} &nbsp;·&nbsp;
                     ${row.get('price',0):,.0f} &nbsp;·&nbsp;
                     {int(row.get('beds') or 0)}bd / {row.get('baths','?')}ba &nbsp;·&nbsp;
                     PITI <b style="color:#cbd5e1">${row.get('monthly_piti',0):,.0f}/mo</b>
                     &nbsp;·&nbsp; Rent est. <b style="color:#cbd5e1">${row.get('rent_estimate',0) or 0:,.0f}/mo</b>
                     {"&nbsp;·&nbsp; " + bey_str if bey_str else ""}
                 </div>
-                <div style="margin-top:5px; display:flex; gap:0.8rem; align-items:center">
+                <div style="margin-top:6px; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap">
                     <span style="background:{meta['color']}22; color:{meta['color']};
                                  font-size:0.72rem; font-weight:600; padding:2px 8px;
                                  border-radius:999px; letter-spacing:0.04em">
                         {meta['icon']} {meta['label']}
                     </span>
-                    {redfin_link}
+                    {listing_buttons}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -334,6 +459,222 @@ with tab_rent:
         csv_p = profiles.to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Download rent profiles CSV", data=csv_p,
                            file_name="rent_profiles.csv", mime="text/csv")
+
+# ── THRESHOLD CALCULATOR TAB ──────────────────────────────────────────────────
+with tab_calc:
+    st.markdown("### 🧮 Threshold Price Calculator")
+    st.markdown(
+        "<p style='color:#94a3b8; font-size:0.9rem; margin-top:-0.5rem'>"
+        "Not every listing is on Redfin. Enter a property's specs to find the "
+        "<b style='color:#cbd5e1'>maximum purchase price</b> where it breaks even "
+        "on cash flow — today and at 1 and 2 years of rent growth.</p>",
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+
+    # ── Inputs ────────────────────────────────────────────────────────────────
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        calc_beds  = st.selectbox("Bedrooms", [1, 2, 3, 4, 5], index=2)
+        calc_baths = st.selectbox("Bathrooms", [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0], index=2)
+        calc_sqft  = st.number_input("Square footage", min_value=400, max_value=6000,
+                                     value=1800, step=50)
+    with c2:
+        # Pull ZIPs that have rent data
+        if not profiles.empty and "zip" in profiles.columns:
+            zip_opts = sorted(profiles["zip"].dropna().astype(str).unique())
+        else:
+            zip_opts = []
+        calc_zip = st.selectbox("ZIP code", zip_opts if zip_opts else ["(no data)"])
+
+        calc_apr = st.number_input("Interest rate (APR %)", min_value=2.0, max_value=15.0,
+                                   value=6.5, step=0.125, format="%.3f")
+        calc_loan_type = st.radio("Loan type", ["FHA (3.5% down)", "Conventional (20% down)"],
+                                  horizontal=True)
+    with c3:
+        calc_tax_rate = st.number_input("Property tax rate (%/yr)", min_value=0.1,
+                                        max_value=3.0, value=1.0, step=0.05, format="%.2f")
+        calc_ins_rate = st.number_input("Insurance rate (%/yr)", min_value=0.1,
+                                        max_value=2.0, value=0.6, step=0.05, format="%.2f")
+        calc_rent_growth = st.number_input("Rent growth (%/yr)", min_value=0.0,
+                                           max_value=10.0, value=4.0, step=0.5, format="%.1f")
+
+    st.markdown("")
+
+    # ── Rent lookup ───────────────────────────────────────────────────────────
+    rent_est    = None
+    rent_note   = ""
+
+    if not profiles.empty and calc_zip and calc_zip != "(no data)":
+        zip_prof = profiles[profiles["zip"].astype(str) == str(calc_zip)]
+        if not zip_prof.empty:
+            exact = zip_prof[zip_prof["beds"] == calc_beds]
+            if not exact.empty:
+                rent_est  = float(exact.iloc[0]["median_rent"])
+                rent_note = f"Exact match: {calc_beds}bd in ZIP {calc_zip}"
+            else:
+                # nearest bed count
+                zip_prof = zip_prof.copy()
+                zip_prof["_diff"] = (zip_prof["beds"] - calc_beds).abs()
+                nearest  = zip_prof.sort_values("_diff").iloc[0]
+                rent_est  = float(nearest["median_rent"])
+                rent_note = (f"No {calc_beds}bd data in {calc_zip} — "
+                             f"using {int(nearest['beds'])}bd median (${rent_est:,.0f}/mo)")
+
+    # ── PITI formula for a given price ───────────────────────────────────────
+    def calc_piti(price: float, apr: float, loan_type: str,
+                  tax_rate: float, ins_rate: float) -> dict:
+        if loan_type.startswith("FHA"):
+            dp_pct   = 0.035
+            ufmip    = 0.0175
+            ann_mip  = 0.0055
+        else:
+            dp_pct   = 0.20
+            ufmip    = 0.0
+            ann_mip  = 0.0
+
+        down      = price * dp_pct
+        base_loan = price - down
+        total_loan= base_loan * (1 + ufmip)
+        r         = (apr / 100) / 12
+        n         = 360
+        if r > 0:
+            monthly_pi = total_loan * (r * (1 + r) ** n) / ((1 + r) ** n - 1)
+        else:
+            monthly_pi = total_loan / n
+        monthly_mip = (total_loan * ann_mip) / 12
+        monthly_tax = (price * tax_rate / 100) / 12
+        monthly_ins = (price * ins_rate / 100) / 12
+        piti = monthly_pi + monthly_mip + monthly_tax + monthly_ins
+        return {
+            "piti":       round(piti, 2),
+            "down":       round(down, 2),
+            "base_loan":  round(base_loan, 2),
+            "monthly_pi": round(monthly_pi, 2),
+            "monthly_mip":round(monthly_mip, 2),
+            "monthly_tax":round(monthly_tax, 2),
+            "monthly_ins":round(monthly_ins, 2),
+        }
+
+    # ── Solve for threshold price: find price where PITI = target_rent ───────
+    # PITI is ~linear in price, so bisection converges in <30 iterations.
+    def find_threshold_price(target_rent: float, apr: float, loan_type: str,
+                             tax_rate: float, ins_rate: float) -> float:
+        lo, hi = 50_000.0, 2_000_000.0
+        for _ in range(60):
+            mid  = (lo + hi) / 2
+            piti = calc_piti(mid, apr, loan_type, tax_rate, ins_rate)["piti"]
+            if piti < target_rent:
+                lo = mid
+            else:
+                hi = mid
+            if hi - lo < 10:
+                break
+        return round((lo + hi) / 2, -2)   # round to nearest $100
+
+    # ── Run calculation ───────────────────────────────────────────────────────
+    if rent_est:
+        growth  = calc_rent_growth / 100
+        rent_1yr = rent_est * (1 + growth) ** 1
+        rent_2yr = rent_est * (1 + growth) ** 2
+
+        thresh_now = find_threshold_price(rent_est,  calc_apr, calc_loan_type,
+                                          calc_tax_rate, calc_ins_rate)
+        thresh_1yr = find_threshold_price(rent_1yr,  calc_apr, calc_loan_type,
+                                          calc_tax_rate, calc_ins_rate)
+        thresh_2yr = find_threshold_price(rent_2yr,  calc_apr, calc_loan_type,
+                                          calc_tax_rate, calc_ins_rate)
+
+        piti_now = calc_piti(thresh_now, calc_apr, calc_loan_type,
+                             calc_tax_rate, calc_ins_rate)
+        piti_1yr = calc_piti(thresh_1yr, calc_apr, calc_loan_type,
+                             calc_tax_rate, calc_ins_rate)
+        piti_2yr = calc_piti(thresh_2yr, calc_apr, calc_loan_type,
+                             calc_tax_rate, calc_ins_rate)
+
+        # ── Rent context box ──────────────────────────────────────────────────
+        if rent_note:
+            st.caption(f"ℹ️ {rent_note}")
+
+        st.markdown(
+            f"<div style='background:#1e293b; border-radius:10px; padding:0.8rem 1.2rem; "
+            f"margin-bottom:1rem; border-left:4px solid #38bdf8'>"
+            f"<span style='color:#94a3b8; font-size:0.8rem'>Rent estimate for {calc_beds}bd in ZIP {calc_zip}</span><br>"
+            f"<span style='color:#f1f5f9; font-size:1.3rem; font-weight:700'>${rent_est:,.0f}/mo today</span>"
+            f"&nbsp;&nbsp;<span style='color:#64748b; font-size:0.85rem'>"
+            f"→ ${rent_1yr:,.0f} in 1yr &nbsp; → ${rent_2yr:,.0f} in 2yr "
+            f"(at {calc_rent_growth:.1f}%/yr growth)</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        # ── Three threshold cards ─────────────────────────────────────────────
+        tc1, tc2, tc3 = st.columns(3)
+
+        def threshold_card(col, horizon_label, icon, color, thresh_price,
+                           rent_at_horizon, piti_detail):
+            down_pct_label = "3.5% down (FHA)" if calc_loan_type.startswith("FHA") else "20% down"
+            col.markdown(f"""
+            <div style="background:#1e293b; border-radius:12px; padding:1.1rem 1.2rem;
+                        border-top:4px solid {color}; height:100%">
+                <div style="font-size:0.72rem; color:#94a3b8; text-transform:uppercase;
+                            letter-spacing:0.08em; margin-bottom:0.3rem">
+                    {icon} {horizon_label}
+                </div>
+                <div style="font-size:1.8rem; font-weight:700; color:{color}; line-height:1.1">
+                    ${thresh_price:,.0f}
+                </div>
+                <div style="font-size:0.78rem; color:#64748b; margin:0.4rem 0 0.6rem 0">
+                    max purchase price
+                </div>
+                <hr style="border-color:#334155; margin:0.5rem 0">
+                <div style="font-size:0.8rem; color:#94a3b8; line-height:1.7">
+                    Down payment &nbsp;<b style="color:#cbd5e1">${piti_detail['down']:,.0f}</b>
+                    <span style="color:#475569"> ({down_pct_label})</span><br>
+                    Monthly PITI &nbsp;<b style="color:#cbd5e1">${piti_detail['piti']:,.0f}/mo</b><br>
+                    Rent at horizon &nbsp;<b style="color:#cbd5e1">${rent_at_horizon:,.0f}/mo</b><br>
+                    Cash flow &nbsp;<b style="color:#22c55e">≈ $0/mo</b>
+                    <span style="color:#475569"> (break-even)</span>
+                </div>
+                <hr style="border-color:#334155; margin:0.5rem 0">
+                <div style="font-size:0.72rem; color:#475569; line-height:1.6">
+                    P&I ${piti_detail['monthly_pi']:,.0f} &nbsp;+&nbsp;
+                    MIP ${piti_detail['monthly_mip']:,.0f} &nbsp;+&nbsp;
+                    Tax ${piti_detail['monthly_tax']:,.0f} &nbsp;+&nbsp;
+                    Ins ${piti_detail['monthly_ins']:,.0f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        threshold_card(tc1, "Immediate Cash Flow+", "✅", "#22c55e",
+                       thresh_now, rent_est,  piti_now)
+        threshold_card(tc2, "Break-even at 1 Year", "🟡", "#eab308",
+                       thresh_1yr, rent_1yr, piti_1yr)
+        threshold_card(tc3, "Break-even at 2 Years", "🟠", "#f97316",
+                       thresh_2yr, rent_2yr, piti_2yr)
+
+        # ── What this means summary ───────────────────────────────────────────
+        st.markdown("")
+        st.markdown(
+            f"<div style='background:#0f172a; border-radius:10px; padding:0.9rem 1.2rem; "
+            f"font-size:0.85rem; color:#94a3b8; margin-top:0.5rem'>"
+            f"💡 <b style='color:#cbd5e1'>How to use this:</b> If you find a listing at or below "
+            f"<b style='color:#22c55e'>${thresh_now:,.0f}</b>, it's cash flow positive from day one. "
+            f"Between <b style='color:#22c55e'>${thresh_now:,.0f}</b> and "
+            f"<b style='color:#eab308'>${thresh_1yr:,.0f}</b>, rent growth closes the gap within a year. "
+            f"Up to <b style='color:#f97316'>${thresh_2yr:,.0f}</b> and you're break-even by year 2. "
+            f"Above that it's high-risk territory at current rents."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    else:
+        st.info(
+            "Select a ZIP code that has rent data to calculate thresholds. "
+            "Run `enrich_rentcast.py` first to populate rent profiles, "
+            "then pick a ZIP and bedroom count above."
+        )
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.divider()
