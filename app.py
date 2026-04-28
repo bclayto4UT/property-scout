@@ -383,42 +383,166 @@ with tab_map:
 
 # ── TABLE TAB ─────────────────────────────────────────────────────────────────
 with tab_table:
-    base_cols = ["address", "city", "zip", "beds", "baths", "sqft",
-                 "price", "tier", "monthly_piti", "rent_estimate",
-                 "cash_flow_now", "break_even_year", "days_on_market", "area_label"]
 
-    if show_mortgage:
-        base_cols += ["down_payment", "monthly_pi", "monthly_mip", "monthly_tax",
-                      "monthly_insurance", "exceeds_fha_limit", "fha_rate_used"]
-    if show_rent:
-        base_cols += ["rent_at_1yr", "rent_at_2yr", "rent_at_5yr", "rent_source"]
-    if show_location:
-        base_cols += ["neighborhood", "latitude", "longitude", "listing_url"]
+    # ── Address search ────────────────────────────────────────────────────────
+    st.markdown("### 🔎 Address Search")
+    search_query = st.text_input(
+        "Search by address, city, ZIP, or neighborhood",
+        placeholder="e.g. 4237 Piccadilly, Indian Land, 29707…",
+        label_visibility="collapsed",
+    )
 
-    display_cols = [c for c in base_cols if c in df.columns]
-    display_df = df[display_cols].copy()
+    search_df = df.copy()
+    if search_query.strip():
+        q = search_query.strip().lower()
+        mask = (
+            search_df.get("address", pd.Series(dtype=str)).fillna("").str.lower().str.contains(q) |
+            search_df.get("city",    pd.Series(dtype=str)).fillna("").str.lower().str.contains(q) |
+            search_df.get("zip",     pd.Series(dtype=str)).fillna("").str.lower().str.contains(q) |
+            search_df.get("neighborhood", pd.Series(dtype=str)).fillna("").str.lower().str.contains(q) |
+            search_df.get("area_label",   pd.Series(dtype=str)).fillna("").str.lower().str.contains(q)
+        )
+        search_df = search_df[mask]
+        if search_df.empty:
+            st.warning(f"No properties found matching **\"{search_query}\"**. "
+                       "The address may not be in the database yet — use `favorites.py` to add it.")
+        else:
+            st.success(f"Found **{len(search_df)}** propert{'y' if len(search_df)==1 else 'ies'} matching \"{search_query}\"")
+    else:
+        st.caption(f"Showing all **{len(search_df):,}** filtered properties")
 
-    # Format money columns
-    money_cols = ["price", "monthly_piti", "rent_estimate", "cash_flow_now",
-                  "down_payment", "monthly_pi", "monthly_mip", "monthly_tax",
-                  "monthly_insurance", "rent_at_1yr", "rent_at_2yr", "rent_at_5yr"]
-    for col in money_cols:
-        if col in display_df.columns:
-            display_df[col] = display_df[col].apply(
-                lambda v: f"${v:,.0f}" if pd.notna(v) else "—"
+    st.divider()
+
+    # ── View toggle ───────────────────────────────────────────────────────────
+    view_mode = st.radio("View as", ["🃏 Cards", "📋 Table"], horizontal=True)
+
+    # ── CARD VIEW ─────────────────────────────────────────────────────────────
+    if view_mode == "🃏 Cards":
+        cards_per_page = 12
+        total_cards = len(search_df)
+        total_pages = max(1, (total_cards + cards_per_page - 1) // cards_per_page)
+
+        if total_cards == 0:
+            st.info("No properties to display. Adjust your filters or search query.")
+        else:
+            page_num = st.number_input("Page", min_value=1, max_value=total_pages,
+                                       value=1, step=1,
+                                       label_visibility="collapsed") if total_pages > 1 else 1
+            start = (page_num - 1) * cards_per_page
+            page_df = search_df.iloc[start:start + cards_per_page]
+
+            if total_pages > 1:
+                st.caption(f"Page {page_num} of {total_pages}  ·  {total_cards:,} properties total")
+
+            # Render 3 cards per row
+            rows = [page_df.iloc[i:i+3] for i in range(0, len(page_df), 3)]
+            for row_group in rows:
+                cols = st.columns(3)
+                for col, (_, prop) in zip(cols, row_group.iterrows()):
+                    tier     = prop.get("tier", "no_rent_data")
+                    meta     = TIER_META.get(tier, TIER_META["no_rent_data"])
+                    price    = prop.get("price")
+                    piti     = prop.get("monthly_piti")
+                    rent     = prop.get("rent_estimate")
+                    cf       = prop.get("cash_flow_now")
+                    beds     = prop.get("beds")
+                    baths    = prop.get("baths")
+                    sqft     = prop.get("sqft")
+                    address  = prop.get("address", "—")
+                    city     = prop.get("city", "")
+                    zip_     = prop.get("zip", "")
+                    dom      = prop.get("days_on_market")
+                    url      = prop.get("listing_url", "")
+                    bey      = prop.get("break_even_year")
+
+                    cf_color = "#22c55e" if cf and cf > 0 else "#ef4444" if cf and cf < 0 else "#94a3b8"
+                    cf_str   = f"${cf:+,.0f}/mo" if pd.notna(cf) else "—"
+
+                    col.markdown(f"""
+<div style="background:#1e293b; border-radius:14px; padding:1.1rem 1.2rem 0.9rem;
+            border-top:4px solid {meta['color']}; margin-bottom:1rem; height:100%">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.5rem">
+        <div style="font-size:0.95rem; font-weight:600; color:#f1f5f9; line-height:1.3; max-width:75%">{address}</div>
+        <span style="background:{meta['color']}22; color:{meta['color']}; font-size:0.65rem;
+                     font-weight:700; padding:2px 7px; border-radius:999px; white-space:nowrap;
+                     margin-left:0.4rem">{meta['icon']} {meta['label']}</span>
+    </div>
+    <div style="font-size:0.78rem; color:#64748b; margin-bottom:0.7rem">{city}{', ' if city and zip_ else ''}{zip_}</div>
+
+    <div style="font-size:1.45rem; font-weight:700; color:#f1f5f9; margin-bottom:0.6rem">
+        {'${:,.0f}'.format(price) if pd.notna(price) else '—'}
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.3rem 0.8rem;
+                font-size:0.78rem; color:#94a3b8; margin-bottom:0.7rem">
+        <div>🛏 {int(beds) if pd.notna(beds) else '—'} bd &nbsp;🛁 {baths if pd.notna(baths) else '—'} ba</div>
+        <div>📐 {'${:,.0f}'.format(sqft) if pd.notna(sqft) else '—'} sqft</div>
+        <div>🏦 PITI {'${:,.0f}/mo'.format(piti) if pd.notna(piti) else '—'}</div>
+        <div>🏘 Rent {'${:,.0f}/mo'.format(rent) if pd.notna(rent) else '—'}</div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center;
+                border-top:1px solid #334155; padding-top:0.6rem; margin-top:0.2rem">
+        <div>
+            <span style="font-size:0.72rem; color:#64748b">Cash flow </span>
+            <span style="font-size:0.9rem; font-weight:700; color:{cf_color}">{cf_str}</span>
+        </div>
+        <div style="font-size:0.7rem; color:#475569">
+            {f'BE yr {bey}' if pd.notna(bey) else ''}{f' · {int(dom)}d' if pd.notna(dom) else ''}
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+                    # Listing button below the card
+                    if url and str(url).startswith("http"):
+                        col.markdown(
+                            f"<a href='{url}' target='_blank' style='"
+                            f"display:block; text-align:center; background:#0ea5e9; color:white; "
+                            f"font-size:0.8rem; font-weight:600; padding:0.45rem 0; "
+                            f"border-radius:8px; text-decoration:none; margin-top:-0.7rem; margin-bottom:0.8rem'>"
+                            f"🔗 View Listing</a>",
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        col.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+
+    # ── TABLE VIEW ────────────────────────────────────────────────────────────
+    else:
+        base_cols = ["address", "city", "zip", "beds", "baths", "sqft",
+                     "price", "tier", "monthly_piti", "rent_estimate",
+                     "cash_flow_now", "break_even_year", "days_on_market", "area_label"]
+
+        if show_mortgage:
+            base_cols += ["down_payment", "monthly_pi", "monthly_mip", "monthly_tax",
+                          "monthly_insurance", "exceeds_fha_limit", "fha_rate_used"]
+        if show_rent:
+            base_cols += ["rent_at_1yr", "rent_at_2yr", "rent_at_5yr", "rent_source"]
+        if show_location:
+            base_cols += ["neighborhood", "latitude", "longitude", "listing_url"]
+
+        display_cols = [c for c in base_cols if c in search_df.columns]
+        display_df = search_df[display_cols].copy()
+
+        money_cols = ["price", "monthly_piti", "rent_estimate", "cash_flow_now",
+                      "down_payment", "monthly_pi", "monthly_mip", "monthly_tax",
+                      "monthly_insurance", "rent_at_1yr", "rent_at_2yr", "rent_at_5yr"]
+        for col in money_cols:
+            if col in display_df.columns:
+                display_df[col] = display_df[col].apply(
+                    lambda v: f"${v:,.0f}" if pd.notna(v) else "—"
+                )
+
+        if "tier" in display_df.columns:
+            display_df["tier"] = display_df["tier"].apply(
+                lambda t: f"{TIER_META.get(t, {}).get('icon','?')} {TIER_META.get(t, {}).get('label', t)}"
+                if pd.notna(t) else "—"
             )
 
-    # Tier → readable label
-    if "tier" in display_df.columns:
-        display_df["tier"] = display_df["tier"].apply(
-            lambda t: f"{TIER_META.get(t, {}).get('icon','?')} {TIER_META.get(t, {}).get('label', t)}"
-            if pd.notna(t) else "—"
-        )
+        st.dataframe(display_df, use_container_width=True, height=520)
 
-    st.dataframe(display_df, use_container_width=True, height=520)
-
-    # CSV download
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    # CSV download always available
+    csv_bytes = search_df.to_csv(index=False).encode("utf-8")
     st.download_button(
         "⬇️ Download filtered results as CSV",
         data=csv_bytes,
