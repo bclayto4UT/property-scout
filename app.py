@@ -360,31 +360,33 @@ with tab_map:
                 f'padding:3px 10px; border-radius:6px; white-space:nowrap">🏠 Zillow →</a>'
             )
 
-            st.markdown(f"""
-            <div style="background:#1e293b; border-radius:10px; padding:0.9rem 1.1rem;
-                        margin-bottom:0.5rem; border-left: 4px solid {meta['color']}">
-                <div style="display:flex; justify-content:space-between; align-items:baseline">
-                    <b style="color:#f1f5f9; font-size:1rem">{addr or 'Unknown'}</b>
-                    <span style="color:{cf_color}; font-weight:700; font-size:1rem">{cf_str}</span>
-                </div>
-                <div style="color:#94a3b8; font-size:0.83rem; margin-top:3px">
-                    {city}, {row.get('zip','')} &nbsp;·&nbsp;
-                    ${row.get('price',0):,.0f} &nbsp;·&nbsp;
-                    {int(row.get('beds') or 0)}bd / {row.get('baths','?')}ba &nbsp;·&nbsp;
-                    PITI <b style="color:#cbd5e1">${row.get('monthly_piti',0):,.0f}/mo</b>
-                    &nbsp;·&nbsp; Rent est. <b style="color:#cbd5e1">${row.get('rent_estimate',0) or 0:,.0f}/mo</b>
-                    {"&nbsp;·&nbsp; " + bey_str if bey_str else ""}
-                </div>
-                <div style="margin-top:6px; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap">
-                    <span style="background:{meta['color']}22; color:{meta['color']};
-                                 font-size:0.72rem; font-weight:600; padding:2px 8px;
-                                 border-radius:999px; letter-spacing:0.04em">
-                        {meta['icon']} {meta['label']}
-                    </span>
-                    {listing_buttons}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            bey_snippet = ("&nbsp;·&nbsp; " + bey_str) if bey_str else ""
+            tier_pill = (
+                '<span style="background:' + meta["color"] + '22; color:' + meta["color"] + '; '
+                'font-size:0.72rem; font-weight:600; padding:2px 8px; '
+                'border-radius:999px; letter-spacing:0.04em">'
+                + meta["icon"] + " " + meta["label"] + '</span>'
+            )
+            card_html = (
+                '<div style="background:#1e293b; border-radius:10px; padding:0.9rem 1.1rem; '
+                'margin-bottom:0.5rem; border-left: 4px solid ' + meta["color"] + '">'
+                '<div style="display:flex; justify-content:space-between; align-items:baseline">'
+                '<b style="color:#f1f5f9; font-size:1rem">' + (addr or "Unknown") + '</b>'
+                '<span style="color:' + cf_color + '; font-weight:700; font-size:1rem">' + cf_str + '</span>'
+                '</div>'
+                '<div style="color:#94a3b8; font-size:0.83rem; margin-top:3px">'
+                + city + ", " + str(row.get("zip", "")) + ' &nbsp;·&nbsp; '
+                '$' + f'{row.get("price", 0):,.0f}' + ' &nbsp;·&nbsp; '
+                + str(int(row.get("beds") or 0)) + 'bd / ' + str(row.get("baths", "?")) + 'ba &nbsp;·&nbsp; '
+                'PITI <b style="color:#cbd5e1">$' + f'{row.get("monthly_piti", 0):,.0f}' + '/mo</b>'
+                '&nbsp;·&nbsp; Rent est. <b style="color:#cbd5e1">$' + f'{row.get("rent_estimate", 0) or 0:,.0f}' + '/mo</b>'
+                + bey_snippet +
+                '</div>'
+                '<div style="margin-top:6px; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap">'
+                + tier_pill + '&nbsp;' + listing_buttons +
+                '</div></div>'
+            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
 
 # ── TABLE TAB ─────────────────────────────────────────────────────────────────
