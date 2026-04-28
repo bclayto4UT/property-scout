@@ -8,12 +8,6 @@ import os
 import pandas as pd
 import streamlit as st
 from urllib.parse import quote_plus
-try:
-    import folium
-    from streamlit_folium import st_folium
-    _FOLIUM_OK = True
-except ImportError:
-    _FOLIUM_OK = False
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DB_PATH = os.environ.get("DB_PATH", "data/properties.db")
@@ -246,73 +240,74 @@ with tab_map:
         unsafe_allow_html=True,
     )
 
-    if not _FOLIUM_OK:
-        st.warning(
-            "Install `folium` and `streamlit-folium` to enable the property pin map: "
-            "`pip install folium streamlit-folium`"
-        )
+    map_df = df[df["latitude"].notna() & df["longitude"].notna()].copy()
+
+    if map_df.empty:
+        st.info("No properties with coordinates match your current filters.")
     else:
-        map_df = df[df["latitude"].notna() & df["longitude"].notna()].copy()
+        import pydeck as pdk
 
-        if map_df.empty:
-            st.info("No properties with coordinates match your current filters.")
-        else:
-            # Tier → folium circle colour
-            TIER_COLORS = {
-                "immediately_rentable": "#22c55e",
-                "rentable_1_2_years":   "#eab308",
-                "high_risk":            "#ef4444",
-                "no_rent_data":         "#94a3b8",
-            }
+        # Tier → RGB colour tuple for PyDeck
+        TIER_COLORS_RGB = {
+            "immediately_rentable": [34, 197, 94],    # #22c55e green
+            "rentable_1_2_years":   [234, 179, 8],    # #eab308 yellow
+            "high_risk":            [239, 68, 68],     # #ef4444 red
+            "no_rent_data":         [148, 163, 184],   # #94a3b8 slate
+        }
 
-            center_lat = map_df["latitude"].mean()
-            center_lon = map_df["longitude"].mean()
+        map_df["color"] = map_df["tier"].map(
+            lambda t: TIER_COLORS_RGB.get(t, TIER_COLORS_RGB["no_rent_data"])
+        )
+        map_df["cf"]       = map_df.get("cash_flow_now", pd.Series(0, index=map_df.index)).fillna(0)
+        map_df["cf_str"]   = map_df["cf"].apply(
+            lambda v: f"+${v:,.0f}/mo" if v >= 0 else f"-${abs(v):,.0f}/mo"
+        )
+        map_df["price"]    = map_df["price"].fillna(0)
+        map_df["piti"]     = map_df.get("monthly_piti", pd.Series(0, index=map_df.index)).fillna(0)
+        map_df["rent_est"] = map_df.get("rent_estimate", pd.Series(0, index=map_df.index)).fillna(0)
+        map_df["beds"]     = map_df["beds"].fillna(0).astype(int)
+        map_df["tier_label"] = map_df["tier"].map(
+            lambda t: TIER_META.get(t, TIER_META["no_rent_data"])["label"]
+        )
+        map_df["tooltip"] = map_df.apply(
+            lambda r: (
+                f"{r.get('address','')} — {r['tier_label']}\n"
+                f"Price: ${r['price']:,.0f} · {r['beds']}bd\n"
+                f"PITI: ${r['piti']:,.0f}/mo · Rent: ${r['rent_est']:,.0f}/mo\n"
+                f"Cash flow: {r['cf_str']}"
+            ),
+            axis=1,
+        )
 
-            fmap = folium.Map(
-                location=[center_lat, center_lon],
-                zoom_start=11,
-                tiles="CartoDB dark_matter",
-            )
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=map_df,
+            get_position=["longitude", "latitude"],
+            get_fill_color="color",
+            get_radius=120,
+            pickable=True,
+            opacity=0.85,
+            stroked=True,
+            get_line_color=[255, 255, 255, 60],
+            line_width_min_pixels=1,
+        )
 
-            for _, row in map_df.iterrows():
-                tier   = row.get("tier", "no_rent_data")
-                color  = TIER_COLORS.get(tier, "#94a3b8")
-                meta   = TIER_META.get(tier, TIER_META["no_rent_data"])
-                cf     = row.get("cash_flow_now") or 0
-                cf_str = f"+${cf:,.0f}/mo" if cf >= 0 else f"-${abs(cf):,.0f}/mo"
-                price  = row.get("price") or 0
-                piti   = row.get("monthly_piti") or 0
-                rent   = row.get("rent_estimate") or 0
-                beds   = int(row.get("beds") or 0)
-                addr   = row.get("address", "")
-                city   = row.get("city", "")
+        view = pdk.ViewState(
+            latitude=map_df["latitude"].mean(),
+            longitude=map_df["longitude"].mean(),
+            zoom=11,
+            pitch=0,
+        )
 
-                popup_html = f"""
-                <div style="font-family:sans-serif; font-size:13px; min-width:200px">
-                    <b>{addr}</b><br>
-                    {city}, {row.get('zip','')}<br>
-                    <hr style="margin:4px 0">
-                    <b style="color:{color}">{meta['icon']} {meta['label']}</b><br>
-                    Price: <b>${price:,.0f}</b> &nbsp;·&nbsp; {beds}bd<br>
-                    PITI: <b>${piti:,.0f}/mo</b><br>
-                    Rent est: <b>${rent:,.0f}/mo</b><br>
-                    Cash flow: <b style="color:{'green' if cf >= 0 else 'red'}">{cf_str}</b>
-                </div>
-                """
-
-                folium.CircleMarker(
-                    location=[row["latitude"], row["longitude"]],
-                    radius=7,
-                    color=color,
-                    fill=True,
-                    fill_color=color,
-                    fill_opacity=0.85,
-                    weight=1.5,
-                    popup=folium.Popup(popup_html, max_width=260),
-                    tooltip=f"{addr} — {cf_str}",
-                ).add_to(fmap)
-
-            st_folium(fmap, use_container_width=True, height=480, returned_objects=[])
+        st.pydeck_chart(
+            pdk.Deck(
+                layers=[layer],
+                initial_view_state=view,
+                map_style="mapbox://styles/mapbox/dark-v10",
+                tooltip={"text": "{tooltip}"},
+            ),
+            use_container_width=True,
+        )
 
     # Property cards below map so users can cross-reference
     st.markdown("#### 📋 Properties matching your filters")
