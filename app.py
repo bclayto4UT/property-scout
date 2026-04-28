@@ -200,8 +200,156 @@ for i, (tier, meta) in enumerate(TIER_META.items()):
 
 st.divider()
 
-# ── Tabs: Map / Table / Rent Profiles ─────────────────────────────────────────
-tab_map, tab_table, tab_rent, tab_calc = st.tabs(["🗺️ Map", "📊 Table", "📈 Rent Profiles", "🧮 Threshold Calculator"])
+# ── Tabs: Intro / Map / Table / Rent Profiles / Calculator ────────────────────
+tab_intro, tab_map, tab_table, tab_rent, tab_calc = st.tabs(["👋 Introduction", "🗺️ Map", "📊 Table", "📈 Rent Profiles", "🧮 Threshold Calculator"])
+
+# ── INTRODUCTION TAB ─────────────────────────────────────────────────────────
+with tab_intro:
+
+    col_left, col_right = st.columns([3, 2], gap="large")
+
+    with col_left:
+        st.markdown("## 👋 Welcome to Property Scout")
+        st.markdown("""
+        <div style="background:#1e293b; border-radius:12px; padding:1.4rem 1.6rem; margin-bottom:1.2rem; border-left:4px solid #38bdf8">
+            <div style="font-size:0.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.5rem">About This Search</div>
+            <p style="color:#e2e8f0; font-size:0.97rem; line-height:1.7; margin:0">
+                This tool is my personal property research hub for the <b style="color:#38bdf8">Greater Charlotte, NC</b> market.
+                My strategy is to <b style="color:#f1f5f9">buy a home with an FHA loan, live in it as my primary residence,
+                then convert it to a long-term rental when I move</b> — building equity and passive income over time.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("### 🎯 What I'm Looking For")
+        st.markdown("""
+        <div style="background:#0f172a; border-radius:12px; padding:1.2rem 1.5rem; margin-bottom:1.2rem">
+            <div style="display:grid; gap:0.7rem">
+                <div style="display:flex; align-items:flex-start; gap:0.8rem">
+                    <span style="font-size:1.1rem">✅</span>
+                    <div>
+                        <div style="color:#f1f5f9; font-weight:600; font-size:0.9rem">Cash Flow Positive ASAP</div>
+                        <div style="color:#94a3b8; font-size:0.82rem">Ideally covering PITI from day one — or close to it.</div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:0.8rem">
+                    <span style="font-size:1.1rem">🟡</span>
+                    <div>
+                        <div style="color:#f1f5f9; font-weight:600; font-size:0.9rem">Break-Even in 1–2 Years</div>
+                        <div style="color:#94a3b8; font-size:0.82rem">Rent growth closing the gap quickly is acceptable.</div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:0.8rem">
+                    <span style="font-size:1.1rem">📈</span>
+                    <div>
+                        <div style="color:#f1f5f9; font-weight:600; font-size:0.9rem">Long-Term Appreciation</div>
+                        <div style="color:#94a3b8; font-size:0.82rem">Charlotte growth trends and neighborhood trajectory matter.</div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:0.8rem">
+                    <span style="font-size:1.1rem">🏦</span>
+                    <div>
+                        <div style="color:#f1f5f9; font-weight:600; font-size:0.9rem">FHA-Eligible</div>
+                        <div style="color:#94a3b8; font-size:0.82rem">3.5% down, primary residence at purchase — the foundation of the strategy.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("### 🗺️ How to Navigate This App")
+        st.markdown("""
+        <div style="background:#1e293b; border-radius:12px; padding:1.2rem 1.5rem">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85rem; color:#cbd5e1">
+                <tr style="border-bottom:1px solid #334155">
+                    <td style="padding:0.5rem 0.8rem 0.5rem 0; font-size:1rem">🗺️</td>
+                    <td style="padding:0.5rem 0.8rem; color:#38bdf8; font-weight:600">Map</td>
+                    <td style="padding:0.5rem 0; color:#94a3b8">Your custom Google My Maps with neighbourhood overlays. Use the sidebar to filter properties.</td>
+                </tr>
+                <tr style="border-bottom:1px solid #334155">
+                    <td style="padding:0.5rem 0.8rem 0.5rem 0; font-size:1rem">📊</td>
+                    <td style="padding:0.5rem 0.8rem; color:#38bdf8; font-weight:600">Table</td>
+                    <td style="padding:0.5rem 0; color:#94a3b8">Sortable data grid — filter by tier, price, beds. Download as CSV.</td>
+                </tr>
+                <tr style="border-bottom:1px solid #334155">
+                    <td style="padding:0.5rem 0.8rem 0.5rem 0; font-size:1rem">📈</td>
+                    <td style="padding:0.5rem 0.8rem; color:#38bdf8; font-weight:600">Rent Profiles</td>
+                    <td style="padding:0.5rem 0; color:#94a3b8">Median rent comps by ZIP code and bedroom count — the basis for all scoring.</td>
+                </tr>
+                <tr>
+                    <td style="padding:0.5rem 0.8rem 0.5rem 0; font-size:1rem">🧮</td>
+                    <td style="padding:0.5rem 0.8rem; color:#38bdf8; font-weight:600">Threshold Calculator</td>
+                    <td style="padding:0.5rem 0; color:#94a3b8">Enter any address specs to find the max purchase price for cash flow break-even.</td>
+                </tr>
+            </table>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_right:
+        st.markdown("## 📝 Personal Notes")
+
+        # ── About Us card ──────────────────────────────────────────────────────
+        st.markdown("""
+        <div style="background:#1e293b; border-radius:12px; padding:1.3rem 1.5rem; margin-bottom:1.2rem; border-left:4px solid #38bdf8">
+            <div style="font-size:0.72rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.6rem">👨‍👩‍👧 About Us — The Claytons</div>
+            <p style="color:#e2e8f0; font-size:0.9rem; line-height:1.75; margin:0">
+                Hi! We're the Claytons, and we're excited to be moving to the Charlotte area and purchasing our first home.
+                Our plan is to find a property we can <b style="color:#f1f5f9">live in for 1–3 years</b>, then keep it as a
+                <b style="color:#f1f5f9">long-term rental</b> — so after we move on, we need the rent to comfortably cover
+                the mortgage and fees.
+                <br><br>
+                We're not afraid of a project — <b style="color:#f1f5f9">cosmetic updates and renovations</b> are fine by us.
+                Our ideal home is <b style="color:#38bdf8">3 bed / 2 bath</b> with a <b style="color:#38bdf8">backyard and garage</b>,
+                though we can be flexible. A <b style="color:#f1f5f9">decent commute</b> and a
+                <b style="color:#f1f5f9">good family-friendly neighbourhood</b> are important to us.
+                <br><br>
+                We're most interested in the <b style="color:#22c55e">south Charlotte area</b>, including
+                <b style="color:#22c55e">Fort Mill, SC</b> and the surrounding communities.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ── Session state init ─────────────────────────────────────────────────
+        if "checklist" not in st.session_state:
+            st.session_state.checklist = [
+                {"label": "Get pre-approved for FHA loan",        "done": False},
+                {"label": "Confirm target ZIP codes with agent",  "done": False},
+                {"label": "Run Threshold Calculator on shortlist","done": False},
+                {"label": "Check rent comps for shortlisted ZIPs","done": False},
+                {"label": "Schedule viewings",                    "done": False},
+                {"label": "Review HOA rules (rental restrictions)","done": False},
+            ]
+
+        # ── Checklist ──────────────────────────────────────────────────────────
+        st.markdown(
+            "<div style='font-size:0.75rem; color:#94a3b8; text-transform:uppercase; "
+            "letter-spacing:0.07em; margin-bottom:0.5rem'>🗒️ Our Search Checklist</div>",
+            unsafe_allow_html=True,
+        )
+
+        for i, item in enumerate(st.session_state.checklist):
+            checked = st.checkbox(item["label"], value=item["done"], key=f"chk_{i}")
+            st.session_state.checklist[i]["done"] = checked
+
+        # ── Add new checklist item ─────────────────────────────────────────────
+        st.markdown("<div style='margin-top:0.5rem'></div>", unsafe_allow_html=True)
+        with st.expander("➕ Add checklist item"):
+            new_item_text = st.text_input("New item", key="new_checklist_item", label_visibility="collapsed",
+                                          placeholder="Type a new task…")
+            if st.button("Add", key="add_checklist_btn") and new_item_text.strip():
+                st.session_state.checklist.append({"label": new_item_text.strip(), "done": False})
+                st.rerun()
+
+        # Progress bar
+        done_count  = sum(1 for item in st.session_state.checklist if item["done"])
+        total_count = len(st.session_state.checklist)
+        pct = done_count / total_count if total_count else 0
+        st.markdown(
+            f"<div style='margin-top:0.8rem; font-size:0.78rem; color:#64748b'>"
+            f"{done_count} of {total_count} completed</div>",
+            unsafe_allow_html=True,
+        )
+        st.progress(pct)
 
 # ── MAP TAB ───────────────────────────────────────────────────────────────────
 # Google My Maps embed URL — edit the `mid=` value if you ever create a new map
@@ -231,162 +379,6 @@ with tab_map:
         "Click any pin for details, or use the layer panel (top-left of map) to toggle KMZ layers. "
         "**[Open full map ↗](https://www.google.com/maps/d/u/0/viewer?mid=14ZUn3qDQoLP_SCuNq8ErT3aADL4Juwc)**"
     )
-
-    # ── Folium property pin map ───────────────────────────────────────────────
-    st.markdown("#### 📍 Filtered Properties")
-    st.markdown(
-        "<p style='color:#94a3b8; font-size:0.85rem; margin-top:-0.5rem'>"
-        "Pins are colour-coded by investment tier. Click any pin for details.</p>",
-        unsafe_allow_html=True,
-    )
-
-    map_df = df[df["latitude"].notna() & df["longitude"].notna()].copy()
-
-    if map_df.empty:
-        st.info("No properties with coordinates match your current filters.")
-    else:
-        import pydeck as pdk
-
-        # Tier → RGB colour tuple for PyDeck
-        TIER_COLORS_RGB = {
-            "immediately_rentable": [34, 197, 94],    # #22c55e green
-            "rentable_1_2_years":   [234, 179, 8],    # #eab308 yellow
-            "high_risk":            [239, 68, 68],     # #ef4444 red
-            "no_rent_data":         [148, 163, 184],   # #94a3b8 slate
-        }
-
-        map_df["color"] = map_df["tier"].map(
-            lambda t: TIER_COLORS_RGB.get(t, TIER_COLORS_RGB["no_rent_data"])
-        )
-        map_df["cf"]       = map_df.get("cash_flow_now", pd.Series(0, index=map_df.index)).fillna(0)
-        map_df["cf_str"]   = map_df["cf"].apply(
-            lambda v: f"+${v:,.0f}/mo" if v >= 0 else f"-${abs(v):,.0f}/mo"
-        )
-        map_df["price"]    = map_df["price"].fillna(0)
-        map_df["piti"]     = map_df.get("monthly_piti", pd.Series(0, index=map_df.index)).fillna(0)
-        map_df["rent_est"] = map_df.get("rent_estimate", pd.Series(0, index=map_df.index)).fillna(0)
-        map_df["beds"]     = map_df["beds"].fillna(0).astype(int)
-        map_df["tier_label"] = map_df["tier"].map(
-            lambda t: TIER_META.get(t, TIER_META["no_rent_data"])["label"]
-        )
-        map_df["tooltip"] = map_df.apply(
-            lambda r: (
-                f"{r.get('address','')} — {r['tier_label']}\n"
-                f"Price: ${r['price']:,.0f} · {r['beds']}bd\n"
-                f"PITI: ${r['piti']:,.0f}/mo · Rent: ${r['rent_est']:,.0f}/mo\n"
-                f"Cash flow: {r['cf_str']}"
-            ),
-            axis=1,
-        )
-
-        layer = pdk.Layer(
-            "ScatterplotLayer",
-            data=map_df,
-            get_position=["longitude", "latitude"],
-            get_fill_color="color",
-            get_radius=120,
-            pickable=True,
-            opacity=0.85,
-            stroked=True,
-            get_line_color=[255, 255, 255, 60],
-            line_width_min_pixels=1,
-        )
-
-        view = pdk.ViewState(
-            latitude=map_df["latitude"].mean(),
-            longitude=map_df["longitude"].mean(),
-            zoom=11,
-            pitch=0,
-        )
-
-        st.pydeck_chart(
-            pdk.Deck(
-                layers=[layer],
-                initial_view_state=view,
-                map_style="mapbox://styles/mapbox/dark-v10",
-                tooltip={"text": "{tooltip}"},
-            ),
-            use_container_width=True,
-        )
-
-    # Property cards below map so users can cross-reference
-    st.markdown("#### 📋 Properties matching your filters")
-    st.markdown(
-        "<p style='color:#94a3b8; font-size:0.85rem; margin-top:-0.5rem'>"
-        "Use the sidebar filters to narrow this list, then find the address on the map above.</p>",
-        unsafe_allow_html=True,
-    )
-
-    prop_df = df.copy()
-
-    if prop_df.empty:
-        st.info("No properties match your current filters.")
-    else:
-        # Sort: best cash flow first
-        prop_df = prop_df.sort_values("cash_flow_now", ascending=False)
-
-        for _, row in prop_df.iterrows():
-            tier = row.get("tier", "no_rent_data")
-            meta = TIER_META.get(tier, TIER_META["no_rent_data"])
-            cf   = row.get("cash_flow_now", 0) or 0
-            cf_str   = f"+${cf:,.0f}/mo" if cf >= 0 else f"-${abs(cf):,.0f}/mo"
-            cf_color = "#22c55e" if cf >= 0 else "#ef4444"
-            bey  = row.get("break_even_year")
-            bey_str  = f"Break-even yr {int(bey)}" if pd.notna(bey) and bey else ""
-
-            # ── Redfin link: stored URL first, fallback to search ─────────────
-            addr    = row.get("address", "") or ""
-            city    = row.get("city", "") or ""
-            state   = row.get("state", "NC") or "NC"
-            if row.get("listing_url"):
-                redfin_url = row["listing_url"]
-            else:
-                redfin_search = quote_plus(f"{addr}, {city}, {state}")
-                redfin_url = f"https://www.redfin.com/search#combined?location={redfin_search}"
-
-            # ── Zillow link: address-based search URL ─────────────────────────
-            zillow_slug = quote_plus(f"{addr} {city} {state}").replace("+", "-")
-            zillow_url  = f"https://www.zillow.com/homes/{zillow_slug}_rb/"
-
-            listing_buttons = (
-                f'<a href="{redfin_url}" target="_blank" style="'
-                f'font-size:0.78rem; color:#38bdf8; text-decoration:none; '
-                f'background:#38bdf811; border:1px solid #38bdf844; '
-                f'padding:3px 10px; border-radius:6px; white-space:nowrap">🔴 Redfin →</a>'
-                f'&nbsp;'
-                f'<a href="{zillow_url}" target="_blank" style="'
-                f'font-size:0.78rem; color:#60a5fa; text-decoration:none; '
-                f'background:#60a5fa11; border:1px solid #60a5fa44; '
-                f'padding:3px 10px; border-radius:6px; white-space:nowrap">🏠 Zillow →</a>'
-            )
-
-            bey_snippet = ("&nbsp;·&nbsp; " + bey_str) if bey_str else ""
-            tier_pill = (
-                '<span style="background:' + meta["color"] + '22; color:' + meta["color"] + '; '
-                'font-size:0.72rem; font-weight:600; padding:2px 8px; '
-                'border-radius:999px; letter-spacing:0.04em">'
-                + meta["icon"] + " " + meta["label"] + '</span>'
-            )
-            card_html = (
-                '<div style="background:#1e293b; border-radius:10px; padding:0.9rem 1.1rem; '
-                'margin-bottom:0.5rem; border-left: 4px solid ' + meta["color"] + '">'
-                '<div style="display:flex; justify-content:space-between; align-items:baseline">'
-                '<b style="color:#f1f5f9; font-size:1rem">' + (addr or "Unknown") + '</b>'
-                '<span style="color:' + cf_color + '; font-weight:700; font-size:1rem">' + cf_str + '</span>'
-                '</div>'
-                '<div style="color:#94a3b8; font-size:0.83rem; margin-top:3px">'
-                + city + ", " + str(row.get("zip", "")) + ' &nbsp;·&nbsp; '
-                '$' + f'{row.get("price", 0):,.0f}' + ' &nbsp;·&nbsp; '
-                + str(int(row.get("beds") or 0)) + 'bd / ' + str(row.get("baths", "?")) + 'ba &nbsp;·&nbsp; '
-                'PITI <b style="color:#cbd5e1">$' + f'{row.get("monthly_piti", 0):,.0f}' + '/mo</b>'
-                '&nbsp;·&nbsp; Rent est. <b style="color:#cbd5e1">$' + f'{row.get("rent_estimate", 0) or 0:,.0f}' + '/mo</b>'
-                + bey_snippet +
-                '</div>'
-                '<div style="margin-top:6px; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap">'
-                + tier_pill + '&nbsp;' + listing_buttons +
-                '</div></div>'
-            )
-            st.markdown(card_html, unsafe_allow_html=True)
 
 
 # ── TABLE TAB ─────────────────────────────────────────────────────────────────
