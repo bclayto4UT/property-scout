@@ -230,7 +230,14 @@ if cf_only:
 favorites: set = load_favorites()
 
 if favs_only:
-    df = df[df["property_id"].astype(str).isin(favorites)] if "property_id" in df.columns else df
+    def _prop_id_series(frame):
+        """Derive the same ID used by the star button, row by row."""
+        if "property_id" in frame.columns and frame["property_id"].notna().any():
+            return frame["property_id"].astype(str)
+        if "listing_id" in frame.columns and frame["listing_id"].notna().any():
+            return frame["listing_id"].astype(str)
+        return frame["address"].astype(str)
+    df = df[_prop_id_series(df).isin(favorites)]
 
 # ── Summary metrics ───────────────────────────────────────────────────────────
 col1, col2, col3, col4 = st.columns(4)
