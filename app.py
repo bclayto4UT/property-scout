@@ -89,63 +89,78 @@ if sales.empty:
 
 # ── Sidebar filters ───────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🔍 Filters")
+    import datetime as _dt
 
-    # Tier filter
-    all_tiers = [t for t in TIER_META if t in sales["tier"].unique()]
-    selected_tiers = st.multiselect(
-        "Investment Tier",
-        options=list(TIER_META.keys()),
-        default=all_tiers,
-        format_func=lambda t: f"{TIER_META[t]['icon']} {TIER_META[t]['label']}",
-    )
+    st.markdown("## 🏠 Property Scout")
+    st.caption("Charlotte, NC · FHA Investment Search")
 
-    # Area filter
-    areas = sorted(sales["area_label"].dropna().unique())
-    selected_areas = st.multiselect("Area / Neighborhood", options=areas, default=areas)
+    st.divider()
 
-    # Price range
+    # ── Price range ───────────────────────────────────────────────────────────
+    st.markdown("**Price Range**")
     min_price = int(sales["price"].min() or 0)
     max_price = int(sales["price"].max() or 2_000_000)
     price_range = st.slider(
-        "Price Range ($)",
+        "Price",
         min_value=min_price,
         max_value=max_price,
         value=(min_price, max_price),
         step=10_000,
         format="$%d",
+        label_visibility="collapsed",
+    )
+    st.caption(f"${price_range[0]:,.0f} – ${price_range[1]:,.0f}")
+
+    # ── Bedrooms ──────────────────────────────────────────────────────────────
+    st.markdown("**Bedrooms**")
+    bed_opts = sorted(sales["beds"].dropna().unique().astype(int))
+    selected_beds = st.multiselect(
+        "Beds",
+        options=bed_opts,
+        default=bed_opts,
+        format_func=lambda b: f"{b} bd",
+        label_visibility="collapsed",
     )
 
-    # Beds
-    bed_opts = sorted(sales["beds"].dropna().unique().astype(int))
-    selected_beds = st.multiselect("Bedrooms", options=bed_opts, default=bed_opts,
-                                   format_func=lambda b: f"{b} bd")
+    # ── Investment tier ───────────────────────────────────────────────────────
+    st.markdown("**Investment Tier**")
+    all_tiers = [t for t in TIER_META if t in sales["tier"].unique()]
+    selected_tiers = st.multiselect(
+        "Tier",
+        options=list(TIER_META.keys()),
+        default=all_tiers,
+        format_func=lambda t: f"{TIER_META[t]['icon']}  {TIER_META[t]['label']}",
+        label_visibility="collapsed",
+    )
 
-    # Cash flow toggle
-    cf_only = st.checkbox("Show cash flow+ only", value=False)
+    # ── Area ──────────────────────────────────────────────────────────────────
+    st.markdown("**Area / Neighborhood**")
+    areas = sorted(sales["area_label"].dropna().unique())
+    selected_areas = st.multiselect(
+        "Area",
+        options=areas,
+        default=areas,
+        label_visibility="collapsed",
+    )
+
+    # ── Quick toggle ──────────────────────────────────────────────────────────
+    cf_only = st.toggle("💰 Cash flow positive only", value=False)
 
     st.divider()
-    st.markdown("### 📋 Columns to show")
-    show_mortgage = st.checkbox("Mortgage details", value=False)
-    show_rent     = st.checkbox("Rent projection", value=True)
-    show_location = st.checkbox("Location fields",  value=False)
+
+    # ── Table column options (collapsed by default) ────────────────────────────
+    with st.expander("⚙️ Table columns"):
+        show_mortgage = st.checkbox("Mortgage breakdown", value=False)
+        show_rent     = st.checkbox("Rent projections", value=True)
+        show_location = st.checkbox("Location fields", value=False)
 
     st.divider()
 
     # ── Data refresh ──────────────────────────────────────────────────────────
-    # Shows when data was last loaded and lets anyone bust the cache instantly.
-    # Does NOT re-run the scraper — that still runs locally. This just forces
-    # the app to re-read the database so the latest scraper output is visible.
-    import datetime as _dt
     if "last_refresh" not in st.session_state:
         st.session_state.last_refresh = _dt.datetime.now().strftime("%-I:%M %p")
 
-    st.markdown(
-        f"<div style='font-size:0.72rem; color:#64748b; margin-bottom:0.5rem'>"
-        f"Data loaded at {st.session_state.last_refresh}</div>",
-        unsafe_allow_html=True,
-    )
-
+    st.caption(f"Loaded at {st.session_state.last_refresh}")
     if st.button("🔄 Refresh Data", use_container_width=True):
         st.cache_data.clear()
         st.session_state.last_refresh = _dt.datetime.now().strftime("%-I:%M %p")
@@ -474,11 +489,11 @@ with tab_table:
                     beds    = prop.get("beds")
                     baths   = prop.get("baths")
                     sqft    = prop.get("sqft")
-                    address = prop.get("address", "—")
-                    city    = prop.get("city", "")
-                    zip_    = prop.get("zip", "")
+                    address = str(prop.get("address") or "—")
+                    city    = str(prop.get("city") or "")
+                    zip_    = str(prop.get("zip") or "")
                     dom     = prop.get("days_on_market")
-                    url     = prop.get("listing_url", "")
+                    url     = str(prop.get("listing_url") or "")
                     bey     = prop.get("break_even_year")
 
                     # Pre-compute all display strings to avoid nested quotes inside f-strings
