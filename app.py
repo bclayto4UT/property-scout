@@ -537,7 +537,7 @@ with tab_table:
             rows = [page_df.iloc[i:i+3] for i in range(0, len(page_df), 3)]
             for row_group in rows:
                 cols = st.columns(3)
-                for col, (_, prop) in zip(cols, row_group.iterrows()):
+                for col, (row_idx, prop) in zip(cols, row_group.iterrows()):
                     tier    = prop.get("tier", "no_rent_data")
                     meta    = TIER_META.get(tier, TIER_META["no_rent_data"])
                     price   = prop.get("price")
@@ -628,7 +628,7 @@ with tab_table:
                     )
                     if col.button(
                         star_label,
-                        key=f"fav_{prop_id}",
+                        key=f"fav_{row_idx}_{prop_id}",
                         help="Remove from favorites" if is_fav else "Add to favorites",
                     ):
                         toggle_favorite(prop_id)
