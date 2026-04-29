@@ -76,6 +76,50 @@ def load_data():
     return sales, rentals, profiles
 
 
+# ── Favorites (persisted to DB) ───────────────────────────────────────────────
+def _fav_conn():
+    return sqlite3.connect(DB_PATH)
+
+def init_favorites_table():
+    """Create the favorites table if it doesn't exist."""
+    if not os.path.exists(DB_PATH):
+        return
+    conn = _fav_conn()
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS favorites "
+        "(property_id TEXT PRIMARY KEY, starred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    conn.commit()
+    conn.close()
+
+def load_favorites() -> set:
+    """Return a set of favorited property_id strings."""
+    if not os.path.exists(DB_PATH):
+        return set()
+    try:
+        conn = _fav_conn()
+        rows = conn.execute("SELECT property_id FROM favorites").fetchall()
+        conn.close()
+        return {r[0] for r in rows}
+    except Exception:
+        return set()
+
+def toggle_favorite(property_id: str):
+    """Add or remove a property from favorites in the DB."""
+    conn = _fav_conn()
+    exists = conn.execute(
+        "SELECT 1 FROM favorites WHERE property_id = ?", (property_id,)
+    ).fetchone()
+    if exists:
+        conn.execute("DELETE FROM favorites WHERE property_id = ?", (property_id,))
+    else:
+        conn.execute("INSERT INTO favorites (property_id) VALUES (?)", (property_id,))
+    conn.commit()
+    conn.close()
+
+if os.path.exists(DB_PATH):
+    init_favorites_table()
+
 sales, rentals, profiles = load_data()
 
 # ── Header ────────────────────────────────────────────────────────────────────
@@ -145,6 +189,7 @@ with st.sidebar:
 
     # ── Quick toggle ──────────────────────────────────────────────────────────
     cf_only = st.toggle("💰 Cash flow positive only", value=False)
+    favs_only = st.toggle("⭐ Favorites only", value=False)
 
     st.divider()
 
@@ -180,6 +225,12 @@ df = df[(df["price"] >= price_range[0]) & (df["price"] <= price_range[1])]
 
 if cf_only:
     df = df[df["cash_flow_now"] > 0]
+
+# Load current favorites from DB
+favorites: set = load_favorites()
+
+if favs_only:
+    df = df[df["property_id"].astype(str).isin(favorites)] if "property_id" in df.columns else df
 
 # ── Summary metrics ───────────────────────────────────────────────────────────
 col1, col2, col3, col4 = st.columns(4)
@@ -541,7 +592,7 @@ with tab_table:
                         unsafe_allow_html=True,
                     )
 
-                    # Zillow + Redfin pill buttons
+                    # Zillow + Redfin pill buttons + star
                     zillow_query = quote_plus((address + " " + city + " " + str(zip_)).strip())
                     zillow_url   = "https://www.zillow.com/homes/" + zillow_query + "_rb/"
                     redfin_url   = url if url and str(url).startswith("http") else None
@@ -559,9 +610,37 @@ with tab_table:
                     pills += "</div>"
                     col.markdown(pills, unsafe_allow_html=True)
 
+                    # ── Favorite star button ───────────────────────────────────
+                    prop_id = str(prop.get("property_id") or prop.get("listing_id") or address)
+                    is_fav  = prop_id in favorites
+                    star_label = "⭐ Saved" if is_fav else "☆ Save"
+                    star_style = (
+                        "background:#1e3a5f; color:#fbbf24; border:1px solid #fbbf24;"
+                        if is_fav else
+                        "background:transparent; color:#64748b; border:1px solid #334155;"
+                    )
+                    if col.button(
+                        star_label,
+                        key=f"fav_{prop_id}",
+                        help="Remove from favorites" if is_fav else "Add to favorites",
+                    ):
+                        toggle_favorite(prop_id)
+                        st.rerun()
+
     # ── TABLE VIEW ────────────────────────────────────────────────────────────
     else:
-        base_cols = ["address", "city", "zip", "beds", "baths", "sqft",
+        # Inject a ⭐ column so favorites are visible in table view
+        search_df = search_df.copy()
+        if "property_id" in search_df.columns:
+            search_df["⭐"] = search_df["property_id"].astype(str).apply(
+                lambda pid: "⭐" if pid in favorites else "☆"
+            )
+        elif "address" in search_df.columns:
+            search_df["⭐"] = search_df["address"].astype(str).apply(
+                lambda a: "⭐" if a in favorites else "☆"
+            )
+
+        base_cols = ["⭐", "address", "city", "zip", "beds", "baths", "sqft",
                      "price", "tier", "monthly_piti", "rent_estimate",
                      "cash_flow_now", "break_even_year", "days_on_market", "area_label"]
 
