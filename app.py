@@ -418,8 +418,34 @@ with tab_table:
 
     # ── CARD VIEW ─────────────────────────────────────────────────────────────
     if view_mode == "🃏 Cards":
+
+        # ── Sort controls ─────────────────────────────────────────────────────
+        sort_col1, sort_col2 = st.columns([2, 1])
+        with sort_col1:
+            sort_by = st.selectbox(
+                "Sort by",
+                options=["cash_flow_now", "price", "zip", "area_label", "beds", "days_on_market", "break_even_year"],
+                format_func=lambda x: {
+                    "cash_flow_now":   "💰 Cash Flow",
+                    "price":           "💲 Price",
+                    "zip":             "📮 ZIP Code",
+                    "area_label":      "📍 Area",
+                    "beds":            "🛏 Bedrooms",
+                    "days_on_market":  "📅 Days on Market",
+                    "break_even_year": "📈 Break-Even Year",
+                }[x],
+                label_visibility="collapsed",
+            )
+        with sort_col2:
+            sort_dir = st.radio("Order", ["⬇ High→Low", "⬆ Low→High"], horizontal=True, label_visibility="collapsed")
+
+        ascending = (sort_dir == "⬆ Low→High")
+        sorted_df = search_df.copy()
+        if sort_by in sorted_df.columns:
+            sorted_df = sorted_df.sort_values(sort_by, ascending=ascending, na_position="last")
+
         cards_per_page = 12
-        total_cards = len(search_df)
+        total_cards = len(sorted_df)
         total_pages = max(1, (total_cards + cards_per_page - 1) // cards_per_page)
 
         if total_cards == 0:
@@ -429,7 +455,7 @@ with tab_table:
                                        value=1, step=1,
                                        label_visibility="collapsed") if total_pages > 1 else 1
             start = (page_num - 1) * cards_per_page
-            page_df = search_df.iloc[start:start + cards_per_page]
+            page_df = sorted_df.iloc[start:start + cards_per_page]
 
             if total_pages > 1:
                 st.caption(f"Page {page_num} of {total_pages}  ·  {total_cards:,} properties total")
@@ -439,85 +465,84 @@ with tab_table:
             for row_group in rows:
                 cols = st.columns(3)
                 for col, (_, prop) in zip(cols, row_group.iterrows()):
-                    tier     = prop.get("tier", "no_rent_data")
-                    meta     = TIER_META.get(tier, TIER_META["no_rent_data"])
-                    price    = prop.get("price")
-                    piti     = prop.get("monthly_piti")
-                    rent     = prop.get("rent_estimate")
-                    cf       = prop.get("cash_flow_now")
-                    beds     = prop.get("beds")
-                    baths    = prop.get("baths")
-                    sqft     = prop.get("sqft")
-                    address  = prop.get("address", "—")
-                    city     = prop.get("city", "")
-                    zip_     = prop.get("zip", "")
-                    dom      = prop.get("days_on_market")
-                    url      = prop.get("listing_url", "")
-                    bey      = prop.get("break_even_year")
+                    tier    = prop.get("tier", "no_rent_data")
+                    meta    = TIER_META.get(tier, TIER_META["no_rent_data"])
+                    price   = prop.get("price")
+                    piti    = prop.get("monthly_piti")
+                    rent    = prop.get("rent_estimate")
+                    cf      = prop.get("cash_flow_now")
+                    beds    = prop.get("beds")
+                    baths   = prop.get("baths")
+                    sqft    = prop.get("sqft")
+                    address = prop.get("address", "—")
+                    city    = prop.get("city", "")
+                    zip_    = prop.get("zip", "")
+                    dom     = prop.get("days_on_market")
+                    url     = prop.get("listing_url", "")
+                    bey     = prop.get("break_even_year")
 
-                    cf_color = "#22c55e" if cf and cf > 0 else "#ef4444" if cf and cf < 0 else "#94a3b8"
-                    cf_str   = f"${cf:+,.0f}/mo" if pd.notna(cf) else "—"
+                    # Pre-compute all display strings to avoid nested quotes inside f-strings
+                    price_str = "${:,.0f}".format(price) if pd.notna(price) else "—"
+                    sqft_str  = "{:,.0f} sqft".format(sqft) if pd.notna(sqft) else "—"
+                    piti_str  = "${:,.0f}/mo".format(piti) if pd.notna(piti) else "—"
+                    rent_str  = "${:,.0f}/mo".format(rent) if pd.notna(rent) else "—"
+                    beds_str  = str(int(beds)) if pd.notna(beds) else "—"
+                    baths_str = str(baths) if pd.notna(baths) else "—"
+                    city_zip  = city + (", " if city and zip_ else "") + str(zip_)
+                    cf_color  = "#22c55e" if cf and cf > 0 else "#ef4444" if cf and cf < 0 else "#94a3b8"
+                    cf_str    = "${:+,.0f}/mo".format(cf) if pd.notna(cf) else "—"
+                    meta_bg   = meta["color"] + "22"
+                    bey_str   = "BE yr {}".format(int(bey)) if pd.notna(bey) else ""
+                    dom_str   = "· {}d".format(int(dom)) if pd.notna(dom) else ""
+                    footer_r  = (bey_str + " " + dom_str).strip()
 
-                    col.markdown(f"""
-<div style="background:#1e293b; border-radius:14px; padding:1.1rem 1.2rem 0.9rem;
-            border-top:4px solid {meta['color']}; margin-bottom:1rem; height:100%">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.5rem">
-        <div style="font-size:0.95rem; font-weight:600; color:#f1f5f9; line-height:1.3; max-width:75%">{address}</div>
-        <span style="background:{meta['color']}22; color:{meta['color']}; font-size:0.65rem;
-                     font-weight:700; padding:2px 7px; border-radius:999px; white-space:nowrap;
-                     margin-left:0.4rem">{meta['icon']} {meta['label']}</span>
-    </div>
-    <div style="font-size:0.78rem; color:#64748b; margin-bottom:0.7rem">{city}{', ' if city and zip_ else ''}{zip_}</div>
+                    col.markdown(
+                        '<div style="background:#1e293b; border-radius:14px; padding:1.1rem 1.2rem 0.9rem;'
+                        ' border-top:4px solid ' + meta["color"] + '; margin-bottom:0.4rem">'
+                        '<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.4rem">'
+                        '<div style="font-size:0.95rem; font-weight:600; color:#f1f5f9; line-height:1.3; max-width:72%">' + address + '</div>'
+                        '<span style="background:' + meta_bg + '; color:' + meta["color"] + '; font-size:0.63rem;'
+                        ' font-weight:700; padding:2px 7px; border-radius:999px; white-space:nowrap;'
+                        ' margin-left:0.3rem">' + meta["icon"] + " " + meta["label"] + '</span>'
+                        '</div>'
+                        '<div style="font-size:0.78rem; color:#64748b; margin-bottom:0.6rem">' + city_zip + '</div>'
+                        '<div style="font-size:1.4rem; font-weight:700; color:#f1f5f9; margin-bottom:0.5rem">' + price_str + '</div>'
+                        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:0.25rem 0.6rem;'
+                        ' font-size:0.78rem; color:#94a3b8; margin-bottom:0.6rem">'
+                        '<div>🛏 ' + beds_str + ' bd &nbsp;🛁 ' + baths_str + ' ba</div>'
+                        '<div>📐 ' + sqft_str + '</div>'
+                        '<div>🏦 PITI ' + piti_str + '</div>'
+                        '<div>🏘 Rent ' + rent_str + '</div>'
+                        '</div>'
+                        '<div style="display:flex; justify-content:space-between; align-items:center;'
+                        ' border-top:1px solid #334155; padding-top:0.5rem">'
+                        '<div>'
+                        '<span style="font-size:0.72rem; color:#64748b">Cash flow </span>'
+                        '<span style="font-size:0.9rem; font-weight:700; color:' + cf_color + '">' + cf_str + '</span>'
+                        '</div>'
+                        '<div style="font-size:0.7rem; color:#475569">' + footer_r + '</div>'
+                        '</div>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
 
-    <div style="font-size:1.45rem; font-weight:700; color:#f1f5f9; margin-bottom:0.6rem">
-        {'${:,.0f}'.format(price) if pd.notna(price) else '—'}
-    </div>
-
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.3rem 0.8rem;
-                font-size:0.78rem; color:#94a3b8; margin-bottom:0.7rem">
-        <div>🛏 {int(beds) if pd.notna(beds) else '—'} bd &nbsp;🛁 {baths if pd.notna(baths) else '—'} ba</div>
-        <div>📐 {'{:,.0f}'.format(sqft) if pd.notna(sqft) else '—'} sqft</div>
-        <div>🏦 PITI {'${:,.0f}/mo'.format(piti) if pd.notna(piti) else '—'}</div>
-        <div>🏘 Rent {'${:,.0f}/mo'.format(rent) if pd.notna(rent) else '—'}</div>
-    </div>
-
-    <div style="display:flex; justify-content:space-between; align-items:center;
-                border-top:1px solid #334155; padding-top:0.6rem; margin-top:0.2rem">
-        <div>
-            <span style="font-size:0.72rem; color:#64748b">Cash flow </span>
-            <span style="font-size:0.9rem; font-weight:700; color:{cf_color}">{cf_str}</span>
-        </div>
-        <div style="font-size:0.7rem; color:#475569">
-            {f'BE yr {int(bey)}' if pd.notna(bey) else ''}{f' · {int(dom)}d' if pd.notna(dom) else ''}
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-                    # Zillow + Redfin pill buttons below the card
-                    zillow_query = quote_plus(f"{address} {city} {zip_}".strip())
-                    zillow_url   = f"https://www.zillow.com/homes/{zillow_query}_rb/"
+                    # Zillow + Redfin pill buttons
+                    zillow_query = quote_plus((address + " " + city + " " + str(zip_)).strip())
+                    zillow_url   = "https://www.zillow.com/homes/" + zillow_query + "_rb/"
                     redfin_url   = url if url and str(url).startswith("http") else None
 
-                    pill_style = (
-                        "display:inline-block; text-align:center; font-size:0.75rem; "
-                        "font-weight:600; padding:0.35rem 1rem; border-radius:999px; "
-                        "text-decoration:none; margin-bottom:0.8rem; "
+                    pill = (
+                        "display:inline-block; font-size:0.75rem; font-weight:600;"
+                        " padding:0.32rem 1rem; border-radius:999px; text-decoration:none; margin-bottom:0.8rem;"
                     )
-                    pills_html = "<div style='display:flex; gap:0.5rem; margin-top:-0.5rem; margin-bottom:0.5rem; flex-wrap:wrap'>"
-                    pills_html += (
-                        f"<a href='{zillow_url}' target='_blank' "
-                        f"style='{pill_style} background:#1d6cc8; color:#fff;'>"
-                        f"🔵 Zillow</a>"
+                    pills = (
+                        '<div style="display:flex; gap:0.5rem; margin-bottom:0.3rem; flex-wrap:wrap">'
+                        '<a href="' + zillow_url + '" target="_blank" style="' + pill + ' background:#1d6cc8; color:#fff;">🔵 Zillow</a>'
                     )
                     if redfin_url:
-                        pills_html += (
-                            f"<a href='{redfin_url}' target='_blank' "
-                            f"style='{pill_style} background:#dc2626; color:#fff;'>"
-                            f"🔴 Redfin</a>"
-                        )
-                    pills_html += "</div>"
-                    col.markdown(pills_html, unsafe_allow_html=True)
+                        pills += '<a href="' + redfin_url + '" target="_blank" style="' + pill + ' background:#dc2626; color:#fff;">🔴 Redfin</a>'
+                    pills += "</div>"
+                    col.markdown(pills, unsafe_allow_html=True)
 
     # ── TABLE VIEW ────────────────────────────────────────────────────────────
     else:
