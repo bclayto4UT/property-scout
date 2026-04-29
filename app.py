@@ -476,7 +476,7 @@ with tab_table:
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.3rem 0.8rem;
                 font-size:0.78rem; color:#94a3b8; margin-bottom:0.7rem">
         <div>🛏 {int(beds) if pd.notna(beds) else '—'} bd &nbsp;🛁 {baths if pd.notna(baths) else '—'} ba</div>
-        <div>📐 {'${:,.0f}'.format(sqft) if pd.notna(sqft) else '—'} sqft</div>
+        <div>📐 {'{:,.0f}'.format(sqft) if pd.notna(sqft) else '—'} sqft</div>
         <div>🏦 PITI {'${:,.0f}/mo'.format(piti) if pd.notna(piti) else '—'}</div>
         <div>🏘 Rent {'${:,.0f}/mo'.format(rent) if pd.notna(rent) else '—'}</div>
     </div>
@@ -488,24 +488,36 @@ with tab_table:
             <span style="font-size:0.9rem; font-weight:700; color:{cf_color}">{cf_str}</span>
         </div>
         <div style="font-size:0.7rem; color:#475569">
-            {f'BE yr {bey}' if pd.notna(bey) else ''}{f' · {int(dom)}d' if pd.notna(dom) else ''}
+            {f'BE yr {int(bey)}' if pd.notna(bey) else ''}{f' · {int(dom)}d' if pd.notna(dom) else ''}
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-                    # Listing button below the card
-                    if url and str(url).startswith("http"):
-                        col.markdown(
-                            f"<a href='{url}' target='_blank' style='"
-                            f"display:block; text-align:center; background:#0ea5e9; color:white; "
-                            f"font-size:0.8rem; font-weight:600; padding:0.45rem 0; "
-                            f"border-radius:8px; text-decoration:none; margin-top:-0.7rem; margin-bottom:0.8rem'>"
-                            f"🔗 View Listing</a>",
-                            unsafe_allow_html=True
+                    # Zillow + Redfin pill buttons below the card
+                    zillow_query = quote_plus(f"{address} {city} {zip_}".strip())
+                    zillow_url   = f"https://www.zillow.com/homes/{zillow_query}_rb/"
+                    redfin_url   = url if url and str(url).startswith("http") else None
+
+                    pill_style = (
+                        "display:inline-block; text-align:center; font-size:0.75rem; "
+                        "font-weight:600; padding:0.35rem 1rem; border-radius:999px; "
+                        "text-decoration:none; margin-bottom:0.8rem; "
+                    )
+                    pills_html = "<div style='display:flex; gap:0.5rem; margin-top:-0.5rem; margin-bottom:0.5rem; flex-wrap:wrap'>"
+                    pills_html += (
+                        f"<a href='{zillow_url}' target='_blank' "
+                        f"style='{pill_style} background:#1d6cc8; color:#fff;'>"
+                        f"🔵 Zillow</a>"
+                    )
+                    if redfin_url:
+                        pills_html += (
+                            f"<a href='{redfin_url}' target='_blank' "
+                            f"style='{pill_style} background:#dc2626; color:#fff;'>"
+                            f"🔴 Redfin</a>"
                         )
-                    else:
-                        col.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+                    pills_html += "</div>"
+                    col.markdown(pills_html, unsafe_allow_html=True)
 
     # ── TABLE VIEW ────────────────────────────────────────────────────────────
     else:
